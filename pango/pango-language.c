@@ -233,11 +233,12 @@ pango_language_get_default (void)
 {
   static PangoLanguage *result = NULL;
 
-  if (G_UNLIKELY (!result))
+  if (g_once_init_enter ((gsize*)&result))
     {
       gchar *lang = _pango_get_lc_ctype ();
-      result = pango_language_from_string (lang);
+      PangoLanguage* tmp_result = pango_language_from_string (lang);
       g_free (lang);
+      g_once_init_leave((gsize*)&result, (gsize)tmp_result);
     }
 
   return result;
@@ -266,6 +267,7 @@ pango_language_get_default (void)
 PangoLanguage *
 pango_language_from_string (const char *language)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
   static GHashTable *hash = NULL;
   PangoLanguagePrivate *priv;
   char *result;
@@ -275,13 +277,17 @@ pango_language_from_string (const char *language)
   if (language == NULL)
     return NULL;
 
+  g_static_mutex_lock (&mutex);
   if (G_UNLIKELY (!hash))
     hash = g_hash_table_new (lang_hash, lang_equal);
   else
     {
       result = g_hash_table_lookup (hash, language);
       if (result)
+      {
+        g_static_mutex_unlock (&mutex);
 	return (PangoLanguage *)result;
+      }
     }
 
   len = strlen (language);
@@ -298,6 +304,7 @@ pango_language_from_string (const char *language)
     ;
 
   g_hash_table_insert (hash, result, result);
+  g_static_mutex_unlock (&mutex);
 
   return (PangoLanguage *)result;
 }
@@ -728,11 +735,13 @@ parse_default_languages (void)
 static PangoLanguage *
 _pango_script_get_default_language (PangoScript script)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
   static gboolean initialized = FALSE;
   static PangoLanguage * const * languages = NULL;
   static GHashTable *hash = NULL;
   PangoLanguage *result, * const * p;
 
+  g_static_mutex_lock (&mutex);
   if (G_UNLIKELY (!initialized))
     {
       languages = parse_default_languages ();
@@ -744,10 +753,16 @@ _pango_script_get_default_language (PangoScript script)
     }
 
   if (!languages)
+  {
+    g_static_mutex_unlock (&mutex);
     return NULL;
+  }
 
   if (g_hash_table_lookup_extended (hash, GINT_TO_POINTER (script), NULL, (gpointer *) (gpointer) &result))
+  {
+    g_static_mutex_unlock (&mutex);
     return result;
+  }
 
   for (p = languages; *p; p++)
     if (pango_language_includes_script (*p, script))
@@ -755,6 +770,7 @@ _pango_script_get_default_language (PangoScript script)
   result = *p;
 
   g_hash_table_insert (hash, GINT_TO_POINTER (script), result);
+  g_static_mutex_unlock (&mutex);
 
   return result;
 }
