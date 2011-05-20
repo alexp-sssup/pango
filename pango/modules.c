@@ -88,6 +88,7 @@ struct _PangoModuleClass
   GTypeModuleClass parent_class;
 };
 
+static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
 static GList *maps = NULL;
 static GSList *registered_engines = NULL;
 static GSList *dlloaded_engines = NULL;
@@ -131,9 +132,12 @@ pango_find_map (PangoLanguage *language,
 		guint          engine_type_id,
 		guint          render_type_id)
 {
-  GList *tmp_list = maps;
   PangoMapInfo *map_info = NULL;
   gboolean found_earlier = FALSE;
+  GList *tmp_list;
+
+  g_static_mutex_lock (&mutex);
+  tmp_list = maps;
 
   while (tmp_list)
     {
@@ -152,6 +156,7 @@ pango_find_map (PangoLanguage *language,
 
   if (!tmp_list)
     {
+      g_static_mutex_unlock (&mutex);
       map_info = g_slice_new (PangoMapInfo);
       map_info->language = language;
       map_info->engine_type_id = engine_type_id;
@@ -159,6 +164,7 @@ pango_find_map (PangoLanguage *language,
 
       build_map (map_info);
 
+      g_static_mutex_lock (&mutex);
       maps = g_list_prepend (maps, map_info);
     }
   else if (found_earlier)
@@ -172,6 +178,7 @@ pango_find_map (PangoLanguage *language,
       maps = g_list_prepend(maps, tmp_list->data);
       g_list_free_1(tmp_list);
     }
+  g_static_mutex_unlock (&mutex);
 
   return map_info->map;
 }
@@ -364,6 +371,7 @@ find_or_create_module (const char *raw_path)
       path = g_strdup (raw_path);
     }
 
+  g_static_mutex_lock (&mutex);
   module = g_hash_table_lookup (dlloaded_modules, path);
   if (module)
     g_free (path);
@@ -373,6 +381,7 @@ find_or_create_module (const char *raw_path)
       module->path = path;
       g_hash_table_insert (dlloaded_modules, path, module);
     }
+  g_static_mutex_unlock (&mutex);
 
   return module;
 }
@@ -382,8 +391,8 @@ script_from_string (const char *str)
 {
   static GEnumClass *class = NULL;
   GEnumValue *value;
-  if (!class)
-    class = g_type_class_ref (PANGO_TYPE_SCRIPT);
+  if (g_once_init_enter ((gsize*)&class))
+    g_once_init_leave((gsize*)&class, (gsize)g_type_class_ref (PANGO_TYPE_SCRIPT));
 
   value = g_enum_get_value_by_nick (class, str);
   if (!value)
@@ -496,7 +505,9 @@ process_module_file (FILE *module_file)
 
       pair->engine = NULL;
 
+      g_static_mutex_lock (&mutex);
       dlloaded_engines = g_slist_prepend (dlloaded_engines, pair);
+      g_static_mutex_unlock (&mutex);
 
     error:
       g_list_foreach (scripts, (GFunc)script_info_free, NULL);
@@ -525,7 +536,9 @@ read_modules (void)
   char **files;
   int n;
 
+  g_static_mutex_lock (&mutex);
   dlloaded_modules = g_hash_table_new (g_str_hash, g_str_equal);
+  g_static_mutex_unlock (&mutex);
 
   if (!file_str)
     file_str = g_build_filename (pango_get_sysconf_subdirectory (),
@@ -551,26 +564,29 @@ read_modules (void)
   g_strfreev (files);
   g_free (file_str);
 
+  g_static_mutex_lock (&mutex);
   dlloaded_engines = g_slist_reverse (dlloaded_engines);
+  g_static_mutex_unlock (&mutex);
 }
 
 static void
 init_modules (void)
 {
-  static gboolean init = FALSE;
-  int i;
+  static gsize init = 0;
 
-  if (init)
-    return;
-  else
-    init = TRUE;
+  if (g_once_init_enter (&init))
+  {
+    int i;
 
-  /* Make sure that the type system is initialized */
-  g_type_init ();
+    /* Make sure that the type system is initialized */
+    g_type_init ();
 
-  for (i = 0; _pango_included_lang_modules[i].list; i++)
-    pango_module_register (&_pango_included_lang_modules[i]);
-  read_modules ();
+    for (i = 0; _pango_included_lang_modules[i].list; i++)
+      pango_module_register (&_pango_included_lang_modules[i]);
+    read_modules ();
+
+    g_once_init_leave(&init, 1);
+  }
 }
 
 static void
@@ -634,6 +650,9 @@ build_map (PangoMapInfo *info)
 
   init_modules();
 
+  //The mutex protects the dlloaded_engines and registered_engines variables
+  //Incidentally also the static local variable no_module_warning is protected
+  g_static_mutex_lock (&mutex);
   if (!dlloaded_engines && !registered_engines)
     {
       static gboolean no_module_warning = FALSE;
@@ -662,6 +681,7 @@ build_map (PangoMapInfo *info)
 
   map_add_engine_list (info, dlloaded_engines, engine_type, render_type);
   map_add_engine_list (info, registered_engines, engine_type, render_type);
+  g_static_mutex_unlock (&mutex);
 }
 
 /**
@@ -782,6 +802,8 @@ pango_module_register (PangoIncludedModule *module)
 
   handle_included_module (module, &tmp_list);
 
+  g_static_mutex_lock (&mutex);
   registered_engines = g_slist_concat (registered_engines,
 				       g_slist_reverse (tmp_list));
+  g_static_mutex_unlock (&mutex);
 }
