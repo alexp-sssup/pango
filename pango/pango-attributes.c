@@ -54,6 +54,7 @@ static PangoAttribute *pango_attr_size_new_internal (int                   size,
 						     gboolean              absolute);
 
 
+static GStaticMutex name_map_mutex = G_STATIC_MUTEX_INIT;
 static GHashTable *name_map = NULL;
 
 /**
@@ -68,17 +69,23 @@ static GHashTable *name_map = NULL;
 PangoAttrType
 pango_attr_type_register (const gchar *name)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
   static guint current_type = 0x1000000;
+
+  g_static_mutex_lock (&mutex);
   guint type = current_type++;
 
   if (name)
     {
+      g_static_mutex_lock (&name_map_mutex);
       if (G_UNLIKELY (!name_map))
 	name_map = g_hash_table_new (NULL, NULL);
 
       g_hash_table_insert (name_map, GUINT_TO_POINTER (type), (gpointer) g_intern_string (name));
+      g_static_mutex_unlock (&name_map_mutex);
     }
 
+  g_static_mutex_unlock (&mutex);
   return type;
 }
 
@@ -102,8 +109,10 @@ pango_attr_type_get_name (PangoAttrType type)
 {
   const char *result = NULL;
 
+  g_static_mutex_lock (&name_map_mutex);
   if (name_map)
     result = g_hash_table_lookup (name_map, GUINT_TO_POINTER ((guint) type));
+  g_static_mutex_unlock (&name_map_mutex);
 
   return result;
 }
