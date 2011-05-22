@@ -291,11 +291,13 @@ pango_engine_pair_get_engine (PangoEnginePair *pair)
 {
   if (!pair->engine)
     {
+      g_static_mutex_lock (&mutex);
       if (g_type_module_use (G_TYPE_MODULE (pair->module)))
 	{
 	  pair->engine = pair->module->create (pair->info.id);
 	  g_type_module_unuse (G_TYPE_MODULE (pair->module));
 	}
+      g_static_mutex_unlock (&mutex);
 
       if (!pair->engine)
 	{
