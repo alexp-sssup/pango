@@ -525,7 +525,7 @@ pango_win32_family_get_type (void)
 {
   static GType object_type = 0;
 
-  if (G_UNLIKELY (!object_type))
+  if (g_once_init_enter ((gsize*)&object_type))
     {
       const GTypeInfo object_info =
       {
@@ -540,9 +540,10 @@ pango_win32_family_get_type (void)
 	(GInstanceInitFunc) NULL,
       };
 
-      object_type = g_type_register_static (PANGO_TYPE_FONT_FAMILY,
+      GType tmp_object_type = g_type_register_static (PANGO_TYPE_FONT_FAMILY,
 					    I_("PangoWin32Family"),
 					    &object_info, 0);
+      g_once_init_leave((gsize*)&object_type, (gsize)tmp_object_type);
     }
 
   return object_type;
@@ -1348,7 +1349,7 @@ pango_win32_face_get_type (void)
 {
   static GType object_type = 0;
 
-  if (G_UNLIKELY (!object_type))
+  if (g_once_init_enter ((gsize*)&object_type))
     {
       static const GTypeInfo object_info =
       {
@@ -1363,9 +1364,10 @@ pango_win32_face_get_type (void)
         (GInstanceInitFunc) NULL,
       };
       
-      object_type = g_type_register_static (PANGO_TYPE_FONT_FACE,
+      GType tmp_object_type = g_type_register_static (PANGO_TYPE_FONT_FACE,
                                             I_("PangoWin32Face"),
                                             &object_info, 0);
+      g_once_init_leave((gsize*)&object_type, (gsize)tmp_object_type);
     }
   
   return object_type;
