@@ -237,8 +237,8 @@ get_gravity_class (void)
 {
   static GEnumClass *class = NULL;
 
-  if (G_UNLIKELY (!class))
-    class = g_type_class_ref (PANGO_TYPE_GRAVITY);
+  if (g_once_init_enter ((gsize*)&class))
+    g_once_init_leave((gsize*)&class, (gsize)g_type_class_ref (PANGO_TYPE_GRAVITY));
 
   return class;
 }
@@ -1015,21 +1015,21 @@ G_DEFINE_ABSTRACT_TYPE (PangoFcFontMap, pango_fc_font_map, PANGO_TYPE_FONT_MAP)
 static void
 pango_fc_font_map_init (PangoFcFontMap *fcfontmap)
 {
-  static gboolean registered_modules = FALSE;
+  static gsize registered_modules = 0;
   PangoFcFontMapPrivate *priv;
 
   priv = fcfontmap->priv = G_TYPE_INSTANCE_GET_PRIVATE (fcfontmap,
 							PANGO_TYPE_FC_FONT_MAP,
 							PangoFcFontMapPrivate);
 
-  if (!registered_modules)
+  if (g_once_init_enter (&registered_modules))
     {
       int i;
 
-      registered_modules = TRUE;
-
       for (i = 0; _pango_included_fc_modules[i].list; i++)
 	pango_module_register (&_pango_included_fc_modules[i]);
+
+      g_once_init_leave(&registered_modules, 1);
     }
 
   priv->n_families = -1;
