@@ -324,9 +324,11 @@ void
 _pango_ft2_font_map_default_substitute (PangoFcFontMap *fcfontmap,
 				       FcPattern      *pattern)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
   PangoFT2FontMap *ft2fontmap = PANGO_FT2_FONT_MAP (fcfontmap);
   FcValue v;
 
+  g_static_mutex_lock (&mutex);
   FcConfigSubstitute (NULL, pattern, FcMatchPattern);
 
   if (ft2fontmap->substitute_func)
@@ -335,6 +337,7 @@ _pango_ft2_font_map_default_substitute (PangoFcFontMap *fcfontmap,
   if (FcPatternGet (pattern, FC_DPI, 0, &v) == FcResultNoMatch)
     FcPatternAddDouble (pattern, FC_DPI, ft2fontmap->dpi_y);
   FcDefaultSubstitute (pattern);
+  g_static_mutex_unlock (&mutex);
 }
 
 static double

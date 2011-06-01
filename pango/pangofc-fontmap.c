@@ -232,6 +232,9 @@ static FcPattern       *pango_fc_patterns_get_font_pattern (PangoFcPatterns *pat
 static FcPattern *uniquify_pattern (PangoFcFontMap *fcfontmap,
 				    FcPattern      *pattern);
 
+//Mutex to protect accessed to fontconfig
+static GStaticMutex fc_mutex = G_STATIC_MUTEX_INIT;
+
 static gpointer
 get_gravity_class (void)
 {
@@ -577,7 +580,9 @@ static void
 pango_fc_font_key_free (PangoFcFontKey *key)
 {
   if (key->pattern)
+  {
     FcPatternDestroy (key->pattern);
+  }
 
   if (key->context_key)
     PANGO_FC_FONT_MAP_GET_CLASS (key->fontmap)->context_key_free (key->fontmap,
@@ -758,7 +763,9 @@ pango_fc_patterns_get_font_pattern (PangoFcPatterns *pats, int i)
       FcResult result;
       if (!pats->match && !pats->fontset)
         {
+          g_static_mutex_lock (&fc_mutex);
 	  pats->match = FcFontMatch (NULL, pats->pattern, &result);
+          g_static_mutex_unlock (&fc_mutex);
 	}
 
       if (pats->match)
@@ -769,7 +776,9 @@ pango_fc_patterns_get_font_pattern (PangoFcPatterns *pats, int i)
       if (!pats->fontset)
         {
 	  FcResult result;
+          g_static_mutex_lock (&fc_mutex);
 	  pats->fontset = FcFontSort (NULL, pats->pattern, FcTrue, NULL, &result);
+          g_static_mutex_unlock (&fc_mutex);
 	  if (pats->match)
 	    {
 	      FcPatternDestroy (pats->match);
@@ -847,7 +856,9 @@ pango_fc_fontset_load_next_font (PangoFcFontset *fontset)
   if (G_UNLIKELY (!font_pattern))
     return NULL;
 
+  g_static_mutex_lock (&fc_mutex);
   font_pattern = FcFontRenderPrepare (NULL, pattern, font_pattern);
+  g_static_mutex_unlock (&fc_mutex);
 
   if (G_UNLIKELY (!font_pattern))
     return NULL;
@@ -1285,7 +1296,9 @@ pango_fc_font_map_list_families (PangoFontMap      *fontmap,
        * the same family have different spacing values */
       GHashTable *temp_family_hash;
 
+      g_static_mutex_lock (&fc_mutex);
       fontset = FcFontList (NULL, pat, os);
+      g_static_mutex_unlock (&fc_mutex);
 
       FcPatternDestroy (pat);
       FcObjectSetDestroy (os);
@@ -2223,10 +2236,12 @@ pango_fc_face_describe (PangoFontFace *face)
 
   g_assert (match_pattern);
 
+  g_static_mutex_lock (&fc_mutex);
   FcConfigSubstitute (NULL, match_pattern, FcMatchPattern);
   FcDefaultSubstitute (match_pattern);
 
   result_pattern = FcFontMatch (NULL, match_pattern, &res);
+  g_static_mutex_unlock (&fc_mutex);
   if (result_pattern)
     {
       desc = pango_fc_font_description_from_pattern (result_pattern, FALSE);
@@ -2283,7 +2298,9 @@ pango_fc_face_list_sizes (PangoFontFace  *face,
   objectset = FcObjectSetCreate ();
   FcObjectSetAdd (objectset, FC_PIXEL_SIZE);
 
+  g_static_mutex_lock (&fc_mutex);
   fontset = FcFontList (NULL, pattern, objectset);
+  g_static_mutex_unlock (&fc_mutex);
 
   if (fontset)
     {
@@ -2446,7 +2463,9 @@ pango_fc_family_list_faces (PangoFontFamily  *family,
 	  PangoFcFace **faces;
 	  gint num = 0;
 
+          g_static_mutex_lock (&fc_mutex);
 	  fontset = FcFontList (NULL, pat, os);
+          g_static_mutex_unlock (&fc_mutex);
 
 	  FcPatternDestroy (pat);
 	  FcObjectSetDestroy (os);

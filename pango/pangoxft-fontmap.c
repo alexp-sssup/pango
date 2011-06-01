@@ -367,9 +367,11 @@ static void
 pango_xft_font_map_default_substitute (PangoFcFontMap *fcfontmap,
 				       FcPattern      *pattern)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
   PangoXftFontMap *xftfontmap = PANGO_XFT_FONT_MAP (fcfontmap);
   double d;
 
+  g_static_mutex_lock (&mutex);
   FcConfigSubstitute (NULL, pattern, FcMatchPattern);
   if (xftfontmap->substitute_func)
     xftfontmap->substitute_func (pattern, xftfontmap->substitute_data);
@@ -381,6 +383,7 @@ pango_xft_font_map_default_substitute (PangoFcFontMap *fcfontmap,
       v.u.d = 1.0;
       FcPatternAdd (pattern, FC_PIXEL_SIZE, v, FcFalse);
     }
+  g_static_mutex_unlock (&mutex);
 }
 
 static PangoFcFont *

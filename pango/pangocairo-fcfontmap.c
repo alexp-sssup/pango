@@ -84,6 +84,8 @@ pango_cairo_fc_font_map_fontset_key_substitute (PangoFcFontMap    *fcfontmap G_G
 						PangoFcFontsetKey *fontkey,
 						FcPattern         *pattern)
 {
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
+  g_static_mutex_lock (&mutex);
   FcConfigSubstitute (NULL, pattern, FcMatchPattern);
 
   if (fontkey)
@@ -91,6 +93,7 @@ pango_cairo_fc_font_map_fontset_key_substitute (PangoFcFontMap    *fcfontmap G_G
 				      pattern);
 
   FcDefaultSubstitute (pattern);
+  g_static_mutex_unlock (&mutex);
 }
 
 static double
