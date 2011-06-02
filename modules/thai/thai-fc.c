@@ -269,6 +269,7 @@ thai_engine_shape (PangoEngineShape *engine G_GNUC_UNUSED,
   PangoOTBuffer *buffer;
   gint i;
   ThaiFontInfo *font_info;
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
 
   g_return_if_fail (font != NULL);
   g_return_if_fail (text != NULL);
@@ -276,9 +277,13 @@ thai_engine_shape (PangoEngineShape *engine G_GNUC_UNUSED,
   g_return_if_fail (analysis != NULL);
 
   fc_font = PANGO_FC_FONT (font);
+  g_static_mutex_lock (&mutex);
   face = pango_fc_font_lock_face (fc_font);
   if (!face)
+  {
+    g_static_mutex_unlock (&mutex);
     return;
+  }
 
   desc.script = analysis->script;
   desc.language = analysis->language;

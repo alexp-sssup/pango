@@ -431,6 +431,7 @@ tibetan_engine_shape (PangoEngineShape *engine G_GNUC_UNUSED,
   glong syllable;
   TibetanCharClass charClass;
   glong cursor = 0;
+  static GStaticMutex mutex = G_STATIC_MUTEX_INIT;
 
   g_return_if_fail (font != NULL);
   g_return_if_fail (text != NULL);
@@ -438,9 +439,13 @@ tibetan_engine_shape (PangoEngineShape *engine G_GNUC_UNUSED,
   g_return_if_fail (analysis != NULL);
 
   fc_font = PANGO_FC_FONT (font);
+  g_static_mutex_lock (&mutex);
   face = pango_fc_font_lock_face (fc_font);
   if (!face)
+  {
+    g_static_mutex_unlock (&mutex);
     return;
+  }
 
   buffer = pango_ot_buffer_new (fc_font);
   pango_ot_buffer_set_rtl (buffer, analysis->level % 2 != 0);
@@ -529,6 +534,7 @@ tibetan_engine_shape (PangoEngineShape *engine G_GNUC_UNUSED,
   pango_ot_buffer_destroy (buffer);
 
   pango_fc_font_unlock_face (fc_font);
+  g_static_mutex_unlock (&mutex);
 }
 
 
